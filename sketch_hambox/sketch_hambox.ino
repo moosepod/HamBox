@@ -16,7 +16,8 @@
    D5 -> LCD-D4
    D11-> LCD-Enable
    D12-> LCD-RS
-   D7 -> 
+   D7 -> voltage divider with 1K resistor and 10k pot (from +5V to ground)
+   A0 -> +5V via 10K pot
    
    Micro pinouts (other than above)
    P1->GRD (Vss)
@@ -39,13 +40,18 @@
 // initialize the library with the numbers of the interface pins
 LiquidCrystal lcd(12, 11, 5, 4, 3, 2);
 
-#define MODE_SWITCH_BUTTON_PIN  7
+#define MODE_SWITCH_BUTTON_PIN  7 // Digital pin
+#define WPM_POT_PIN             0 // Analog pin
 
 #define MODE_KEYER 1
 #define MODE_FUNC  2
 
 int current_mode = 0; // Current 
 int last_mode = 0;
+int current_wpm = 0;
+
+#define WPM_MAX_POT_VAL  916
+#define MAX_WPM           40
 
 // Following all used for toggle-switch debounce
 int last_button_state = LOW;   // the previous reading from the input pin
@@ -67,12 +73,19 @@ void setup() {
   Serial.begin(9600);
 }
 
-void enter_mode(int mode) {
-  current_mode = mode;
+void update_lcd(int mode_changed) {
+  if (mode_changed) {
+    lcd.clear();
+  }
+  
   switch (current_mode) {
     case MODE_KEYER:
-      lcd.clear();
+      lcd.setCursor(0,0);
       lcd.print("Keyer");
+      lcd.setCursor(0,1);
+      lcd.print("WPM: ");
+      lcd.print(current_wpm);
+      lcd.print(' ');
       break;
     case MODE_FUNC:
       lcd.clear();
@@ -81,6 +94,11 @@ void enter_mode(int mode) {
     default:
       lcd.print("Unknown mode.");
   }
+}
+
+void enter_mode(int mode) {
+  current_mode = mode;
+  update_lcd(true);
 }
 
 void next_mode() {
@@ -97,8 +115,23 @@ void next_mode() {
   } 
 }
 
-void loop() {
-  int reading = digitalRead(MODE_SWITCH_BUTTON_PIN);
+void update_wpm () {
+  int reading = analogRead(WPM_POT_PIN);
+
+  int new_wpm = abs(WPM_MAX_POT_VAL - reading) / (WPM_MAX_POT_VAL / MAX_WPM);
+  if (new_wpm < 1) {
+    new_wpm = 1;
+  }
+   
+  if (current_wpm != new_wpm) {
+    current_wpm = new_wpm;
+    update_lcd(false);
+  } 
+
+}
+
+void check_for_mode_change() {
+    int reading = digitalRead(MODE_SWITCH_BUTTON_PIN);
   
   // check to see if you just pressed the button 
   // (i.e. the input went from LOW to HIGH),  and you've waited 
@@ -128,5 +161,9 @@ void loop() {
   } else {
       last_mode = 0;
   }
-  
+}
+
+void loop() {
+  check_for_mode_change();
+  update_wpm();
 }
